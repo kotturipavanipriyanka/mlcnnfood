@@ -1,0 +1,33 @@
+from keras.preprocessing.image import load_img
+from keras.preprocessing.image import img_to_array
+from keras.applications.vgg16 import preprocess_input
+from keras.applications.vgg16 import decode_predictions
+from keras.applications.vgg16 import VGG16
+# load the model
+model=VGG16()
+print(model.summary())
+
+
+from keras.applications.vgg16 import VGG16
+from tensorflow.keras.utils import plot_model
+# from keras.utils.vis_utils import plot_model
+model=VGG16()
+plot_model(model,to_file='vgg.png')
+
+
+image=load_img('image.jpg',target_size=(224,224))
+# Convert the image pixels to a numpy array
+image=img_to_array(image)
+# Reshape data for the model
+print("shape",image.shape)
+image=image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
+# Prepare the image for the VGG model
+image=preprocess_input(image)
+# Predict the probability across all output classes
+yfood=model.predict(image)
+# Convert the probabilities to class labels
+label=decode_predictions(yhat)
+# Retrieve the most likely result, e.g. highest probability
+label=label[0][0]
+# Print the classification
+print('%s(%.2f%%)'%(label[1],label[2]*100))
