@@ -1,0 +1,169 @@
+import os
+import sys
+from tempfile import NamedTemporaryFile
+from urllib.request import urlopen
+from urllib.parse import unquote, urlparse
+from urllib.error import HTTPError
+from zipfile import ZipFile
+import tarfile
+import shutil
+
+CHUNK_SIZE = 40960
+DATA_SOURCE_MAPPING = 'data set'
+KAGGLE_INPUT_PATH='/kaggle/input'
+KAGGLE_WORKING_PATH='/kaggle/working'
+KAGGLE_SYMLINK='kaggle'
+
+!umount /kaggle/input/ 2> /dev/null
+shutil.rmtree('/kaggle/input', ignore_errors=True)
+os.makedirs(KAGGLE_INPUT_PATH, 0o777, exist_ok=True)
+os.makedirs(KAGGLE_WORKING_PATH, 0o777, exist_ok=True)
+
+try:
+  os.symlink(KAGGLE_INPUT_PATH, os.path.join("..", 'input'), target_is_directory=True)
+except FileExistsError:
+  pass
+try:
+  os.symlink(KAGGLE_WORKING_PATH, os.path.join("..", 'working'), target_is_directory=True)
+except FileExistsError:
+  pass
+
+for data_source_mapping in DATA_SOURCE_MAPPING.split(','):
+    directory, download_url_encoded = data_source_mapping.split(':')
+    download_url = unquote(download_url_encoded)
+    filename = urlparse(download_url).path
+    destination_path = os.path.join(KAGGLE_INPUT_PATH, directory)
+    try:
+        with urlopen(download_url) as fileres, NamedTemporaryFile() as tfile:
+            total_length = fileres.headers['content-length']
+            print(f'Downloading {directory}, {total_length} bytes compressed')
+            dl = 0
+            data = fileres.read(CHUNK_SIZE)
+            while len(data) > 0:
+                dl += len(data)
+                tfile.write(data)
+                done = int(50 * dl / int(total_length))
+                sys.stdout.write(f"\r[{'=' * done}{' ' * (50-done)}] {dl} bytes downloaded")
+                sys.stdout.flush()
+                data = fileres.read(CHUNK_SIZE)
+            if filename.endswith('.zip'):
+              with ZipFile(tfile) as zfile:
+                zfile.extractall(destination_path)
+            else:
+              with tarfile.open(tfile.name) as tarfile:
+                tarfile.extractall(destination_path)
+            print(f'\nDownloaded and uncompressed: {directory}')
+    except HTTPError as e:
+        print(f'Failed to load (likely expired) {download_url} to path {destination_path}')
+        continue
+    except OSError as e:
+        print(f'Failed to load {download_url} to path {destination_path}')
+        continue
+
+print('Data source import complete.')
+import numpy as np
+import pandas as pd
+
+import os
+for dirname, _, filenames in os.walk('/kaggle/input'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
+import os
+data_dir = os.listdir('/kaggle/input/food')
+print(data_dir)
+train =r'/kaggle/input/food/training_set/training_set'
+test = r'/kaggle/input/food/test_set/test_set'
+print(os.listdir(train))
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Flatten, Dense
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = train_datagen.flow_from_directory(
+    train,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='foodegorical'
+)
+
+test_generator = test_datagen.flow_from_directory(
+    test,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical'
+)
+import matplotlib.pyplot as plt
+import numpy as np
+
+x_batch, y_batch = train_generator.next()
+
+plt.figure(figsize=(10, 10))
+for i in range(5):
+    random_index = np.random.randint(0, len(x_batch))
+    image = x_batch[random_index]
+    label = y_batch[random_index]
+    plt.subplot(1, 5, i+1)
+    plt.imshow(image)
+    plt.title('Class: ' + str(np.argmax(label)))
+    plt.axis('off')
+plt.show()
+from tensorflow.keras.applications import InceptionV3
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Flatten, Dense
+from tensorflow.keras.optimizers import Adam
+
+inception_base = InceptionV3(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+for layer in inception_base.layers:
+    layer.trainable = False
+
+model = Sequential()
+model.add(inception_base)
+model.add(Flatten())
+model.add(Dense(256, activation='relu'))
+model.add(Dense(2, activation='softmax'))
+
+model.compile(optimizer=Adam(lr=0.001), loss='categorical_crossentropy', metrics=['accuracy'])
+
+model.summary()
+history = model.fit(
+    train_generator,
+    steps_per_epoch=len(train_generator),
+    epochs=2,
+    validation_data=test_generator,
+    validation_steps=len(test_generator)
+)
+import matplotlib.pyplot as plt
+import numpy as np
+
+label_mapping = {0: 'true', 1: 'false'}
+
+predictions = model.predict(test_generator)
+
+x_batch_test, y_batch_test = test_generator.next()
+
+plt.figure(figsize=(15, 10))
+for i in range(10):
+    plt.subplot(2, 5, i + 1)
+    plt.imshow(x_batch_test[i])
+
+    true_label = label_mapping[np.argmax(y_batch_test[i])]
+    predicted_label = label_mapping[np.argmax(predictions[i])]
+
+    plt.title(f'True: {true_label}, Predicted: {predicted_label}')
+    plt.axis('off')
+
+plt.show()
